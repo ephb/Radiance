@@ -194,6 +194,10 @@ install(DIRECTORY "${CMAKE_BINARY_DIR}/lib/"
   DESTINATION "lib"
 )
 
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/common/pyradlib"
+  DESTINATION "lib"
+)
+
 # copy make tests to build
 file(COPY test DESTINATION ${CMAKE_BINARY_DIR})
 

@@ -1,0 +1,29 @@
+name: Windows CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{runner.workspace}}/build
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
+      run: cmake $GITHUB_WORKSPACE -DBUILD_LIBTIFF=ON
+
+    - name: Build
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Release
+
+    - name: Test
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        python ../test/run_tests.py -l ${{runner.workspace}}/build/lib -p ${{runner.workspace}}/build/bin
