@@ -20,21 +20,20 @@ jobs:
         sudo apt-get install -y build-essential cmake libx11-dev libglu1-mesa-dev
 
     - name: Create Build Environment
-      run: cmake -E make_directory ${{runner.workspace}}/build
+      run: cmake -E make_directory build
 
     - name: Configure CMake
       shell: bash
-      working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE -DBUILD_LIBTIFF=ON
+      working-directory: build
+      run: cmake .. -DBUILD_LIBTIFF=ON
 
     - name: Build
       shell: bash
-      working-directory: ${{runner.workspace}}/build
+      working-directory: build
       run: cmake --build .
 
     - name: Test
       shell: bash
-      working-directory: ${{runner.workspace}}/build
       env:
-        PYTHONPATH: ${{runner.workspace}}/src/common
-      run: python test/run_tests.py -l ${{runner.workspace}}/build/lib -p ${{runner.workspace}}/build/bin
+        PYTHONPATH: ${{github.workspace}}/src/common
+      run: python test/run_tests.py -l build/lib -p build/bin
