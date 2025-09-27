@@ -28,7 +28,7 @@ jobs:
 
       - name: Merge upstream/master into master
         run: |
-          git checkout master
+          git checkout -B master --track origin/master
           git merge --no-ff -m "Merge upstream/master" upstream/master
           git push origin master
         env:
