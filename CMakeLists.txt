@@ -190,11 +190,16 @@ set(test_dir "${CMAKE_CURRENT_SOURCE_DIR}/test/test data")
 
 add_subdirectory(resources)
 
-install(DIRECTORY "${CMAKE_BINARY_DIR}/lib/"
+# copy pyradlib to build tree for tests
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/common/pyradlib"
+  DESTINATION "${CMAKE_BINARY_DIR}/lib"
+)
+# install pyradlib
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/common/pyradlib"
   DESTINATION "lib"
 )
 
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/common/pyradlib"
+install(DIRECTORY "${CMAKE_BINARY_DIR}/lib/"
   DESTINATION "lib"
 )
 

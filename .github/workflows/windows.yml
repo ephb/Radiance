@@ -9,13 +9,30 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Set up MSVC
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Set up Vcpkg
+      uses: lukka/run-vcpkg@v10
+      with:
+        vcpkgGitCommitId: 'a39fce2319204dce335a167a9099d3e6992b8d1b'
+
+    - name: Install dependencies
+      run: |
+        vcpkg install tiff:x64-windows opengl:x64-windows
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure CMake
       shell: bash
       working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE -DBUILD_LIBTIFF=ON
+      run: cmake $GITHUB_WORKSPACE -DBUILD_LIBTIFF=ON -DCMAKE_TOOLCHAIN_FILE=${{env.VCPKG_ROOT}}/scripts/buildsystems/vcpkg.cmake
 
     - name: Build
       shell: bash
@@ -25,5 +42,4 @@ jobs:
     - name: Test
       shell: bash
       working-directory: ${{runner.workspace}}/build
-      run: |
-        python ../test/run_tests.py -l ${{runner.workspace}}/build/lib -p ${{runner.workspace}}/build/bin
+      run: python ../test/run_tests.py -l ${{runner.workspace}}/build/lib -p ${{runner.workspace}}/build/bin
