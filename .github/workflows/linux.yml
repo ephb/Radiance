@@ -32,8 +32,13 @@ jobs:
       working-directory: build
       run: cmake --build .
 
+    - name: Set execute permissions
+      shell: bash
+      run: chmod -R +x build/bin
+
     - name: Test
       shell: bash
       env:
-        RAYPATH: src/common
-      run: python test/run_tests.py -p build/bin
+        PATH: ${{github.workspace}}/build/bin:${{env.PATH}}
+        RAYPATH: ${{github.workspace}}/src/common
+      run: python test/run_tests.py

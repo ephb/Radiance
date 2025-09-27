@@ -116,7 +116,7 @@ def llcompare(lltest, llref, ignore_empty=False, _recurse=[]):
 				raise error('%s (line %s)' % (str(e), _recurse + [i + 1]))
 			else: raise error('%s (line %d)' % (str(e), i + 1))
 	
-_HLPATS  = '(\s*)(?:([^=\s]*)\s*=\s*(.*)\s*|(.*)\s*)'
+_HLPATS  = r'(\s*)(?:([^=\s]*)\s*=\s*(.*)\s*|(.*)\s*)'
 _hlpat = re.compile(_HLPATS)
 def split_headers(s):
 	'''split Radiance file headers (eg. the output of getinfo).
