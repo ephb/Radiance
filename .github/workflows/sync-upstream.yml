@@ -1,0 +1,35 @@
+name: Sync with Upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v3
+        with:
+          # We need to fetch all branches and tags so that we can push to the target branch
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/LBNL-ETA/Radiance.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Merge upstream/master into master
+        run: |
+          git checkout master
+          git merge --no-ff -m "Merge upstream/master" upstream/master
+          git push origin master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
