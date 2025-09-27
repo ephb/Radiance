@@ -35,4 +35,6 @@ jobs:
     - name: Test
       shell: bash
       working-directory: ${{runner.workspace}}/build
-      run: python ../test/run_tests.py -l ${{runner.workspace}}/build/lib -p ${{runner.workspace}}/build/bin
+      env:
+        PYTHONPATH: ${{runner.workspace}}/src/common
+      run: python test/run_tests.py -l ${{runner.workspace}}/build/lib -p ${{runner.workspace}}/build/bin
