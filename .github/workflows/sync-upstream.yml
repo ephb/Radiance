@@ -1,0 +1,57 @@
+name: Sync with Upstream (Rebase)
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # daily at midnight
+  workflow_dispatch:
+
+permissions:
+  contents: write  # required to push
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'github-actions@github.com'
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/LBNL-ETA/Radiance.git || true
+
+      - name: Fetch upstream and origin
+        run: |
+          git fetch origin
+          git fetch upstream
+
+      - name: Rebase master onto upstream/master
+        run: |
+          set -e
+          git checkout -B master --track origin/master
+          # Only rebase if master is not already based on upstream/master
+          if ! git merge-base --is-ancestor upstream/master master || \
+             [ "$(git rev-parse upstream/master)" != "$(git rev-parse master^{upstream} || echo none)" ]; then
+            if ! git rebase upstream/master; then
+              echo "Rebase conflict detected. Aborting and skipping push."
+              git rebase --abort
+              exit 0
+            fi
+          fi
+
+      - name: Push if changed (force-with-lease)
+        run: |
+          if [ "$(git rev-parse master)" != "$(git rev-parse origin/master)" ]; then
+            echo "Pushing rebased master..."
+            git push --force-with-lease origin master
+          else
+            echo "No changes to push."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
