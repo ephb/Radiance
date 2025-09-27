@@ -162,7 +162,46 @@ Ensuring that the scientific accuracy of the simulations is not compromised is o
 
 By following a rigorous, test-driven approach, it is possible to modernize the Radiance codebase while preserving its scientific integrity.
 
-## 7. Proposed Migration Plan
+## 7. Optimizing `rtrace`
+
+The `rtrace` application is a critical component of the Radiance suite, and its performance is paramount. This section provides a specific analysis of `rtrace` and offers recommendations for improving its performance, particularly on Windows.
+
+### 7.1. Analysis of the `-n` Option for Parallelism
+
+The `-n` command-line option is intended to specify the number of parallel processes for rendering. However, as noted, this option does not currently work on Windows. The investigation into the source code reveals why:
+
+*   The main function for `rtrace` is in [`src/rt/rtmain.c`](https://github.com/LBNL/Radiance/blob/master/src/rt/rtmain.c), which parses the `-n` option and stores the number of processes in the `nproc` variable.
+*   The core logic in [`src/rt/rtrace.c`](https://github.com/LBNL/Radiance/blob/master/src/rt/rtrace.c) checks if `nproc > 1` and, if so, calls `ray_popen(nproc)` to create child processes.
+*   The `ray_popen` function and related process management rely on the `fork()` system call, which is a POSIX-specific feature and is not available on Windows. This is why the multi-processing capability is effectively disabled on Windows builds.
+
+### 7.2. Recommendation: A Modern, Thread-Based Approach for `rtrace`
+
+To enable high-performance, parallel execution of `rtrace` on Windows and other platforms, the `fork()`-based process model should be replaced with a modern, thread-based model using the C++17 standard library.
+
+**Proposed Implementation:**
+
+1.  **Thread Pool:** Create a thread pool that manages a number of worker threads equal to the value of the `-n` option (or the number of available hardware cores).
+2.  **Task Queue:** Implement a thread-safe task queue to hold the rays that need to be traced.
+3.  **Ray Tracing Workers:** Each thread in the pool will pull a ray from the queue, trace it using the existing `rayvalue()` function, and store the result.
+4.  **Result Aggregation:** The main thread will be responsible for collecting the results from the worker threads and printing them to the output in the correct order.
+
+This approach has several advantages over the current process-based model:
+
+*   **Cross-Platform:** It will work on any platform with a C++17 compliant compiler, including Windows.
+*   **Lower Overhead:** Threads have lower creation overhead and memory footprint compared to processes.
+*   **Finer-Grained Control:** A thread-based model offers more sophisticated options for synchronization and data sharing, which can lead to further performance optimizations.
+
+### 7.3. Further Performance Optimizations for `rtrace`
+
+Beyond multi-threading, the migration to C++17 opens the door to other performance enhancements:
+
+*   **SIMD Intrinsics:** For the core ray-object intersection calculations, consider using SIMD (Single Instruction, Multiple Data) intrinsics to perform calculations on multiple data points simultaneously.
+*   **Memory Layout:** Profile and optimize memory access patterns to improve cache locality. This could involve restructuring data to be more cache-friendly.
+*   **Modern C++ Algorithms:** Replace hand-rolled loops with C++17 parallel algorithms where applicable.
+
+By implementing a modern threading model and exploring these additional optimizations, the performance of `rtrace` can be significantly improved, especially on multi-core Windows systems.
+
+## 8. Proposed Migration Plan
 
 This section outlines a high-level, phased approach for migrating the Radiance codebase to C++17. This approach is designed to be incremental, allowing for continuous testing and validation at each stage.
 
