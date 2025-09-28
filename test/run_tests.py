@@ -8,6 +8,7 @@ Invocation:
   As script, call with -H for instructions.
   As module, see docstrings in class RadianceTests for instructions.
 '''
+from __future__ import division, print_function, unicode_literals
 __all__ = ['TESTCATS', 'RadianceTests', 'main']
 import os
 import sys

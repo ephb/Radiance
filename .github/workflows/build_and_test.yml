@@ -1,0 +1,391 @@
+name: Build + Test
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build_Windows:
+    name: "Build for Windows"
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Perl
+        uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: "5.32"
+
+      - name: Install cpanminus
+        run: cpan App::cpanminus
+
+      - name: Install PAR::Packer
+        run: |
+          cpanm PAR::Packer --force
+
+      - name: check perl packer
+        run: |
+          perl -version
+          pp --version
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: "5.15.2"
+
+      - name: Configure and Build
+        run: |
+          cmake -G "Visual Studio 17 2022" -A x64 -S . -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_LIBTIFF=ON `
+            -DTIFF_INCLUDE_DIR:PATH="${{ github.workspace }}/build/libtiff-prefix/src/libtiff/libtiff" `
+            -DTIFF_LIBRARY:FILEPATH="${{ github.workspace }}/build/libtiff-prefix/src/libtiff-build/libtiff/tiff.lib" `
+            -DBUILD_PABOPTO_UTILS=ON `
+            -DBUILD_QT=ON `
+            -DCMAKE_SYSTEM_VERSION=10.0
+          cmake --build build --config Release --verbose
+        shell: pwsh
+
+      - name: Build installer
+        run: cmake --build build --config Release --target PACKAGE
+        shell: pwsh
+
+      - name: Zip Compiled Artifact
+        run: |
+          mv build\_CPack_Packages\win64\NSIS\radiance-*-Windows\ radiance
+          Compress-Archive -U -Path radiance\* -DestinationPath Radiance_Windows
+
+      - name: list files
+        run: |
+          mkdir WindowsBuild
+          cp ./build/radiance-*.exe ./WindowsBuild/Radiance_Windows.exe
+          cp ./Radiance_Windows.zip ./WindowsBuild/Radiance_Windows.zip
+        shell: bash
+
+      - name: Zip Build Artifact
+        run: |
+          Compress-Archive -U -Path WindowsBuild -DestinationPath Radiance_Windows_both
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Radiance_Windows_both
+          path: Radiance_Windows_both.zip
+
+  build_OSX:
+    name: "Build for OSX"
+    runs-on: macos-13
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XQuartz
+        run: |
+          wget https://github.com/XQuartz/XQuartz/releases/download/XQuartz-2.7.11/XQuartz-2.7.11.dmg
+          sudo hdiutil attach XQuartz-2.7.11.dmg
+          sudo installer -package /Volumes/XQuartz-2.7.11/XQuartz.pkg -target /
+
+      - name: Compile
+        env:
+          CMAKE_OSX_ARCHITECTURES: x86_64
+        run: |
+          mkdir build
+          cd build
+          cmake -DBUILD_PABOPTO_UTILS=ON -DCMAKE_BUILD_TYPE=Release ..
+          make -j8
+
+      - name: Run CPack
+        run: |
+          cd build
+          sudo cpack -G ZIP .
+
+      - name: Build pkg installer
+        run: |
+          cd ./build/_CPack_Packages/Darwin/ZIP/
+          sudo cp -r ./radiance*/usr/local/radiance .
+          sudo pkgbuild --identifier radiance.pkg --root "radiance" --install-location "/usr/local/radiance" radiance_Darwin.pkg
+          sudo cp -r radiance_Darwin.pkg ../../../../Radiance_OSX.pkg
+
+      - name: Zip Build Artifact and list files
+        run: |
+          mkdir OSXBuild
+          sudo cp Radiance_OSX.pkg ./OSXBuild/Radiance_OSX.pkg
+          sudo mv ./build/_CPack_Packages/Darwin/ZIP/radiance-*-Darwin/usr/local/radiance ./radiance
+          sudo zip -r Radiance_OSX.zip ./radiance
+          sudo cp ./Radiance_OSX.zip ./OSXBuild/Radiance_OSX.zip
+          sudo zip -r Radiance_OSX_both.zip ./OSXBuild
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Radiance_OSX_both
+          path: Radiance_OSX_both.zip
+
+  build_OSX_arm64:
+    name: "Build for OSX arm64"
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XQuartz
+        run: |
+          wget https://github.com/XQuartz/XQuartz/releases/download/XQuartz-2.8.5/XQuartz-2.8.5.pkg
+          sudo installer -package XQuartz-2.8.5.pkg -target /
+
+      - name: Compile
+        env:
+          CMAKE_OSX_ARCHITECTURES: arm64
+        run: |
+          mkdir build
+          cd build
+          cmake -DCMAKE_OSX_ARCHITECTURES=arm64 -DBUILD_PABOPTO_UTILS=ON -DCMAKE_BUILD_TYPE=Release ..
+          make -j8
+
+      - name: Run CPack
+        run: |
+          cd build
+          sudo cpack -G ZIP .
+
+      - name: Build pkg installer
+        run: |
+          cd ./build/_CPack_Packages/Darwin/ZIP/
+          sudo cp -r ./radiance*/usr/local/radiance .
+          sudo pkgbuild --identifier radiance.pkg --root "radiance" --install-location "/usr/local/radiance" radiance_Darwin.pkg
+          sudo cp -r radiance_Darwin.pkg ../../../../Radiance_OSX.pkg
+
+      - name: Zip Build Artifact and list files
+        run: |
+          mkdir OSXBuild
+          sudo cp Radiance_OSX.pkg ./OSXBuild/Radiance_OSX_arm64.pkg
+          sudo mv ./build/_CPack_Packages/Darwin/ZIP/radiance-*-Darwin/usr/local/radiance ./radiance
+          sudo zip -r Radiance_OSX.zip ./radiance
+          sudo cp ./Radiance_OSX.zip ./OSXBuild/Radiance_OSX_arm64.zip
+          sudo zip -r Radiance_OSX_arm64_both.zip ./OSXBuild
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Radiance_OSX_arm64_both
+          path: Radiance_OSX_arm64_both.zip
+
+  build_Linux:
+    name: "Build for Linux"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglu1-mesa-dev freeglut3-dev csh
+
+      - name: Compile
+        run: |
+          mkdir build
+          cd build
+          cmake -DBUILD_PABOPTO_UTILS=ON -DCMAKE_BUILD_TYPE=Release ..
+          make -j8
+
+      - name: Build installer
+        run: |
+          cd build
+          make package -j8
+
+      - name: Zip Build Artifact
+        run: |
+          cd build
+          zip -r Radiance_Linux.zip radiance-*-Linux.tar.gz
+          cp ./Radiance_Linux.zip ./../Radiance_Linux.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Radiance_Linux
+          path: Radiance_Linux.zip
+
+  Test_Windows_1:
+    needs: [build_Windows]
+    name: Test for Windows 1
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Windows installers
+        uses: actions/download-artifact@v4
+        with:
+          name: Radiance_Windows_both
+      - name: unzip artifacts
+        run: |
+          unzip Radiance_Windows_both.zip
+          unzip WindowsBuild/Radiance_Windows.zip
+      - name: run tests -util
+        shell: pwsh
+        run: |
+          $Env:RAYPATH = ".;${{ github.workspace }}\lib"
+          $Env:PATH += ";${{ github.workspace }}\bin"
+          cd ./test/util/
+          make clean
+          make
+
+  Test_Linux_1:
+    needs: [build_Linux]
+    name: "Test for Linux 1"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Linux installers
+        uses: actions/download-artifact@v4
+        with:
+          name: Radiance_Linux
+      - name: unzip artifacts
+        run: |
+          unzip Radiance_Linux.zip
+          tar -xvf radiance-*-Linux.tar.gz
+      - name: copy compiled folder
+        run: |
+          mkdir buildRad
+          cp -avr ./radiance-*-Linux/usr/local/radiance ./buildRad
+      - name: run tests -util
+        run: |
+          export RAYPATH=.:${{ github.workspace }}/buildRad/radiance/lib
+          export PATH=$PATH:${{ github.workspace }}/buildRad/radiance/bin
+          cd ./test/util/
+          make clean
+          make
+
+  release_installers:
+    name: deploy installers
+    runs-on: ubuntu-22.04
+    needs: [Test_Windows_1, Test_Linux_1]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+      - name: unzip artifacts
+        run: |
+          unzip Radiance_Windows_both/Radiance_Windows_both.zip
+          unzip Radiance_OSX_both/Radiance_OSX_both.zip
+          unzip Radiance_OSX_arm64_both/Radiance_OSX_arm64_both.zip
+      - name: Get Git log
+        id: get_release_note
+        run: |
+          LAST_COMMIT_ID=$(git log --pretty="%h" -n 1)
+          RELEASE_TAG=${LAST_COMMIT_ID}
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          note_header="[<h3>$RELEASE_TAG</h3>](https://github.com/${{ github.repository }}/compare/$LAST_TAG...$RELEASE_TAG) ($(date +'%Y-%m-%d'))"
+          RELEASE_NOTE="$note_header<ul>$(git log $LAST_TAG..HEAD --pretty="<li> %s -%an (%h)</li>"  )</ul>"
+          echo ::set-output name=RELEASE_NOTE::${RELEASE_NOTE}
+      - name: get release name
+        id: get_release_name
+        run: |
+          LAST_COMMIT_ID=$(git log --pretty="%h" -n 1)
+          RAD_VERSION=$(cat src/rt/VERSION)
+          RAD_VERSION="${RAD_VERSION/RADIANCE /}"
+          RELEASE_TAG=${LAST_COMMIT_ID}
+          RELEASE_NAME='Radiance '"${RAD_VERSION}"' ('$(date +'%Y-%m-%d')')'
+          echo ::set-output name=LAST_COMMIT_ID::${LAST_COMMIT_ID}
+          echo ::set-output name=RELEASE_TAG::${RELEASE_TAG}
+          echo ::set-output name=RELEASE_NAME::${RELEASE_NAME}
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{steps.get_release_name.outputs.RELEASE_TAG}}
+          release_name: ${{steps.get_release_name.outputs.RELEASE_NAME}}
+          commitish: master
+          body: ${{steps.get_release_note.outputs.RELEASE_NOTE}}
+          draft: false
+          prerelease: true
+      - name: Release Asset Radiance_Windows exe
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: WindowsBuild/Radiance_Windows.exe
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_Windows.exe
+          asset_content_type: application/exe
+      - name: Release Asset Radiance_Windows zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: WindowsBuild/Radiance_Windows.zip
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_Windows.zip
+          asset_content_type: application/zip
+      - name: Release Asset Radiance_Linux
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: Radiance_Linux/Radiance_Linux.zip
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_Linux.zip
+          asset_content_type: application/zip
+      - name: Release Asset Radiance_OSX pkg
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: OSXBuild/Radiance_OSX.pkg
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_OSX.pkg
+          asset_content_type: application/pkg
+      - name: Release Asset Radiance_OSX zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: OSXBuild/Radiance_OSX.zip
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_OSX.zip
+          asset_content_type: application/zip
+      - name: Release Asset Radiance_OSX_arm64 pkg
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: OSXBuild/Radiance_OSX_arm64.pkg
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_OSX_arm64.pkg
+          asset_content_type: application/pkg
+      - name: Release Asset Radiance_OSX_arm64 zip
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: OSXBuild/Radiance_OSX_arm64.zip
+          asset_name: Radiance_${{steps.get_release_name.outputs.RELEASE_TAG}}_OSX_arm64.zip
+          asset_content_type: application/zip
+      - name: Release Asset Radiance_Auxiliary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: Radiance_Auxiliary/Radiance_Auxiliary.zip
+          asset_name: Radiance_Auxiliary_${{steps.get_release_name.outputs.RELEASE_TAG}}.zip
+          asset_content_type: application/zip
