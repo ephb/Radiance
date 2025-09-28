@@ -1,15 +1,11 @@
 name: Linux CI
 
-on:
-  push:
-    branches: [ master, main ]
-  pull_request:
-    branches: [ master, main ]
+on: [push, pull_request]
 
 jobs:
   build-and-test:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v4
