@@ -1,0 +1,38 @@
+name: Linux CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglu1-mesa-dev freeglut3-dev csh build-essential cmake
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_PABOPTO_UTILS=ON
+
+      - name: Build
+        run: cmake --build build -- -j$(nproc)
+
+      - name: Run util tests
+        env:
+          RAYPATH: .:${{ github.workspace }}/build/lib
+          PATH: ${{ env.PATH }}:${{ github.workspace }}/build/bin
+        run: |
+          cd test/util
+          make clean
+          make
