@@ -1,19 +1,23 @@
 name: Linux CI
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: write  # only needed if you keep the optional release job
 
 jobs:
-  build-and-test:
+  build:
+    name: Build (Linux)
     runs-on: ubuntu-22.04
     timeout-minutes: 40
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libglu1-mesa-dev freeglut3-dev csh build-essential cmake
+          sudo apt-get install -y \
+            build-essential cmake csh libglu1-mesa-dev freeglut3-dev
 
       - name: Configure
         run: |
@@ -22,13 +26,98 @@ jobs:
             -DBUILD_PABOPTO_UTILS=ON
 
       - name: Build
-        run: cmake --build build -- -j$(nproc)
+        run: cmake --build build --parallel
 
-      - name: Run util tests
-        env:
-          RAYPATH: .:${{ github.workspace }}/build/lib
-          PATH: ${{ env.PATH }}:${{ github.workspace }}/build/bin
+      - name: Install to staging
         run: |
-          cd test/util
-          make clean
-          make
+          cmake --install build --prefix "$GITHUB_WORKSPACE/install"
+          # Optional: show structure for debugging
+          find install -maxdepth 2 -type d -print
+
+      - name: (Optional) Package with CPack
+        run: |
+          (cd build && cpack -G TGZ . || true)
+          ls -l build || true
+
+      - name: Upload staged install
+        uses: actions/upload-artifact@v4
+        with:
+          name: Radiance_Linux_install
+          path: install
+
+      - name: Upload package archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Radiance_Linux_pkg
+          path: build/*.tar.gz
+          if-no-files-found: ignore
+
+  tests:
+    name: Tests (Linux – ${{ matrix.suite }})
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [units, renders1, renders2, renders3, renders4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download staged install
+        uses: actions/download-artifact@v4
+        with:
+          name: Radiance_Linux_install
+          path: install
+
+      - name: Run tests
+        env:
+          RAYPATH: .:${{ github.workspace }}/install/lib
+          PATH: ${{ env.PATH }}:${{ github.workspace }}/install/bin
+          LD_LIBRARY_PATH: ${{ github.workspace }}/install/lib:${{ env.LD_LIBRARY_PATH }}
+        run: |
+          rtrace -version
+          case "${{ matrix.suite }}" in
+            units)
+              for d in util gen cal px cv; do
+                echo "== Running $d =="
+                (cd "test/$d" && make clean && make)
+              done
+              ;;
+            renders1) (cd test/renders && make clean && make batch1 -j2) ;;
+            renders2) (cd test/renders && make clean && make batch2 -j2) ;;
+            renders3) (cd test/renders && make clean && make batch3 -j2) ;;
+            renders4) (cd test/renders && make clean && make batch4 -j2) ;;
+          esac
+
+      - name: Upload test folder (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Linux_${{ matrix.suite }}_test_outputs
+          path: test
+
+  release:
+    name: Release (Linux)
+    needs: [build, tests]
+    runs-on: ubuntu-22.04
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: Radiance_Linux_pkg
+          path: package
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.sha }}
+          name: Radiance (Linux) – ${{ github.sha }}
+          body: 'Automated build for Linux'
+          prerelease: true
+          files: package/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
